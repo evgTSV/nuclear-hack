@@ -1,4 +1,8 @@
 import threading
+import itertools
+from pipe import Pipe
+from os import getenv
+
 import serial
 import serial.tools.list_ports
 import time
@@ -30,12 +34,19 @@ if ser is None:
 
 serial_lock = threading.Lock()
 
-
 def arduino_map(x, in_min, in_max, out_min, out_max):
     return (x - in_min) * (out_max - out_min) // (in_max - in_min) + out_min
 
 def transform_command(command):
     parts = command.strip().split()
+
+    offsets = (
+            Pipe(getenv("ROBOT_POS_OFFSETS"))
+            | (lambda s: s.strip())
+            | (lambda s: s.split())
+            | (lambda p: map(float, p))
+            | list
+    ).get()
 
     if len(parts) == 4 and (parts[0] in ("MOVE_TO", "MOVE_TO_ROBOT")):
         try:
@@ -51,11 +62,9 @@ def transform_command(command):
             y_new = y
             z_new = z
         else:
-            # MOVE_TO: меняем X и Y местами + смещения
-            x_new = -y + 552
-            y_new = -x + 268
-            z_new = z-3
-        # Собираем итоговую строку
+            x_new = -y + offsets[0]
+            y_new = -x + offsets[1]
+            z_new = z + offsets[2]
         return f"{parts[0]} {int(x_new)} {int(y_new)} {int(z_new)}"
     if parts[0] == "TOOL_ROTATE_TO":
         try:
@@ -66,7 +75,6 @@ def transform_command(command):
         except ValueError:
             return "Invalid angle values"
 
-    # Если это не MOVE_TO* - возвращаем исходную команду как есть.
     return command
 
 def send_to_arduino_and_get_response(command):
