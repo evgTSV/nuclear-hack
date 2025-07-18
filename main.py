@@ -1,4 +1,5 @@
 import cv2
+import robot_client as rb
 
 cap = cv2.VideoCapture(1) # пробуем встроенную камеру
 if not cap.isOpened():
@@ -17,5 +18,9 @@ while True:
         print(f'Сохранено {filename}')
     elif key==ord('q'):
         break
+        
+    command = input("Введите команду: ")
+    rb.send_to_arduino_and_get_response(command)
+    
 cap.release()
 cv2.destroyAllWindows()

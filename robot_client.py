@@ -3,11 +3,6 @@ import serial
 import serial.tools.list_ports
 import time
 
-busy = False
-current_client = None
-last_command_time = 0
-INACTIVITY_TIMEOUT = 30  # 30 секунд
-
 def find_arduino_port():
     ports = serial.tools.list_ports.comports()
     for port in ports:
