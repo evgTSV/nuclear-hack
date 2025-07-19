@@ -75,40 +75,91 @@ class PyramidBuilder:
         time.sleep(0.3)
         self.safe_move(Point3(pos.x, pos.y, self.safe_height))
 
-    def process_markers(self, markers: List[Marker]):
+    def process_markers(self, markers: List[Marker]) -> bool:
         """
         Основной метод обработки маркеров.
         Возвращает True если пирамида собрана, иначе False.
+        
+        Алгоритм:
+        1. Сначала убираем все лишние маркеры из центра
+        2. Затем собираем пирамиду из целевых маркеров
         """
         if not markers:
             return False
     
+        # Конвертируем в словарь для удобства
         markers_dict = {m.id: m for m in markers}
     
+        # Первичная калибровка (если еще не сделана)
         if self.pyramid_center is None:
             self.calculate_working_area(markers_dict)
             if self.pyramid_center is None:
                 logger.warning("Не найдены угловые маркеры для калибровки!")
                 return False
     
-        for marker_id in list(self.target_ids):
+        # 1. Фаза очистки: убираем лишние маркеры не из target_ids
+        self._remove_extra_markers(markers_dict)
+    
+        # 2. Фаза сборки: строим пирамиду из целевых маркеров
+        for marker_id in list(self.target_ids):  # Копируем список для безопасного удаления
             if marker_id in markers_dict:
                 marker = markers_dict[marker_id]
-                logger.info(f"Обработка маркера {marker_id} на позиции {marker.position}")
+                logger.info(f"Сборка: обработка маркера {marker_id} на позиции {marker.position}")
     
+                # Захватываем маркер
                 self.pick(marker.position)
     
+                # Вычисляем угол поворота
                 angle_deg = self._rotation_vector_to_angle(marker.oriental)
     
+                # Целевая позиция для установки
                 target_pos = Point3(
                     self.pyramid_center.x,
                     self.pyramid_center.y,
                     conf.field_z + self.current_level * conf.marker_z
                 )
     
+                # Устанавливаем маркер в пирамиду
                 self.place(target_pos, angle_deg)
     
+                # Обновляем состояние
                 self.target_ids.remove(marker_id)
                 self.current_level += 1
+                logger.info(f"Добавлен уровень {self.current_level}")
     
         return len(self.target_ids) == 0
+    
+    def _remove_extra_markers(self, markers_dict: Dict[int, Marker]):
+        """Убирает лишние маркеры не из target_ids"""
+        # Определяем зону очистки (круг радиусом 100 мм вокруг центра)
+        cleanup_radius = 100  # мм
+    
+        for marker_id, marker in list(markers_dict.items()):
+            # Пропускаем угловые и целевые маркеры
+            if marker_id in self.corner_ids or marker_id in self.target_ids:
+                continue
+    
+            # Проверяем находится ли маркер в зоне очистки
+            distance_to_center = np.sqrt(
+                (marker.position.x - self.pyramid_center.x)**2 +
+                (marker.position.y - self.pyramid_center.y)**2
+            )
+    
+            if distance_to_center < cleanup_radius:
+                logger.info(f"Убираем лишний маркер {marker_id} из центра")
+    
+                # Захватываем маркер
+                self.pick(marker.position)
+    
+                # Переносим в зону сброса (за пределы рабочей области)
+                dump_pos = Point3(
+                    self.pyramid_center.x + 200,  # 200 мм правее центра
+                    self.pyramid_center.y + 200,  # 200 мм выше центра
+                    self.safe_height
+                )
+    
+                # Сбрасываем маркер
+                self.place(dump_pos)
+    
+                # Удаляем из словаря, чтобы больше не обрабатывать
+                del markers_dict[marker_id]
