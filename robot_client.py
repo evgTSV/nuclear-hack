@@ -33,10 +33,6 @@ def find_arduino_port():
     logger.error("Arduino не найдена")
     return None
 
-ser = find_arduino_port()
-if ser is None:
-    exit()
-
 serial_lock = threading.Lock()
 
 def arduino_map(x, in_min, in_max, out_min, out_max):
@@ -50,6 +46,10 @@ def rb2abs_coord(pos: Point3):
     )
 
 def send_to_arduino_and_get_response(command: RbCmd):
+    ser = find_arduino_port()
+    if ser is None:
+        logger.warning("Ожидание подключения ардуино")
+        return "null"
     logger.info(f"Принята команда: {command}")
 
     command_str = command_to_str(command)
