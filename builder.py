@@ -100,8 +100,8 @@ class PyramidBuilder:
         # 1. Фаза очистки: убираем лишние маркеры не из target_ids
         self._remove_extra_markers(markers_dict)
 
-        # 2. Фаза сборки: строим пирамиду из целевых маркеров
-        for marker_id in list(self.target_ids):  # Копируем список для безопасного удаления
+        # 2. Фаза сборки: строим пирамиду из целевых маркеров в порядке убывания ID
+        for marker_id in sorted(self.target_ids, reverse=True):  # Сортируем ID по убыванию
             if marker_id in markers_dict:
                 marker = markers_dict[marker_id]
                 logger.info(f"Сборка: обработка маркера {marker_id} на позиции {marker.position}")
@@ -112,11 +112,12 @@ class PyramidBuilder:
                 # Вычисляем угол поворота
                 angle_deg = self._rotation_vector_to_angle(marker.oriental)
 
+                goida_z = conf.field_z + self.current_level * (conf.marker_z * (1 + 0.1 * (max(self.target_ids) - marker_id)))
                 # Целевая позиция для установки
                 target_pos = Point3(
                     self.pyramid_center.x,
                     self.pyramid_center.y,
-                    conf.field_z + self.current_level * conf.marker_z
+                    goida_z
                 )
 
                 # Устанавливаем маркер в пирамиду
