@@ -26,7 +26,7 @@ class VacuumOff:
 @dataclass
 class SetRotate:
     deg: int
-    tag: RbCmdKind = RbCmdKind.MOVE
+    tag: RbCmdKind = RbCmdKind.SET_ROTATE
     
 RbCmd = Union[Move, VacuumOn, VacuumOff, SetRotate]
 logger = SingletonLogger()
