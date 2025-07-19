@@ -2,16 +2,24 @@ import cv2
 import cv2.aruco as aruco
 import numpy as np
 from dataclasses import dataclass
-import glob
+
+from configuration import cam_id
+from singleton_logger import SingletonLogger
+import configuration as conf
+
+logger = SingletonLogger()
 
 @dataclass()
-class Point3():
+class Point3:
     x: float
     y: float
     z: float
+    
+def p3_from_list(l):
+    return Point3(l[0], l[1], l[2])
 
 @dataclass()
-class Marker():
+class Marker:
     id: int
     position: Point3
     oriental: Point3
@@ -43,14 +51,14 @@ def calibr(aruco_dict, img):
              dist_coeffs=dist,
              reprojection_error=mean_error / len(obj_points))
     return np.savez
-
 def get_marker_by(id_, markers):
     return list(filter(lambda m: m.id == id_, markers))[0]
 
 def detect_img_markers():
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(cam_id)
+
     if not cap.isOpened():
-        print("Ошибка! Камера не подключена!")
+        logger.error(f"Ошибка! Камера id={cam_id} не подключена!")
         exit()
     parameters = aruco.DetectorParameters()
     aruco_dict_4X4 = aruco.getPredefinedDictionary(aruco.DICT_4X4_250)
@@ -61,12 +69,12 @@ def detect_img_markers():
     detector_6X6 = aruco.ArucoDetector(aruco_dict_6X6, parameters)
     # camera_matrix = np.array([[800, 0, 320], [0, 800, 240], [0, 0, 1]], dtype=np.float32)
     # dist_coeffs = np.zeros((5, 1), dtype=np.float32)
-    print("Configure ar/uco")
+    logger.debug("Configure ar/uco")
 
     while True:
         ret, frame = cap.read()
         if not ret:
-            print("Ошибка: Не удалось получить кадр")
+            logger.error("Ошибка: Не удалось получить кадр")
             break
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         corners_4X4, ids_4X4, rejected_4X4 = detector_4X4.detectMarkers(gray)
@@ -84,13 +92,15 @@ def detect_img_markers():
             for m in markers:
                 cv2.drawFrameAxes(frame, camera_parameters['camera_matrix'], camera_parameters['dist_coeffs'],
                                   m.position, m.oriental, 0.05)
-
                 # Вывод информации о позиции и ориентации
-                print(f"Marker found: {m}")
+                logger.info(f"Marker found: {m}")
+                
             top_left = get_marker_by(2, markers)
             top_right = get_marker_by(3, markers)
             bottom_left = get_marker_by(1, markers)
             bottom_right = get_marker_by(0, markers)
+            logger.info(f"Получены углы:\n\tВерхний левый:{top_left}\n\tВерхний правый:{top_right}\n\tНижний левый:{bottom_left}\n\tНижний правый:{bottom_right}")
+            
         # for 5X5
         if ids_5X5 is not None:
             aruco.drawDetectedMarkers(frame, corners_5X5, ids_5X5)
@@ -126,5 +136,7 @@ def detect_img_markers():
     cap.release()
     cv2.destroyAllWindows()
 
-print("Hello")
-detect_img_markers()
+try:
+    detect_img_markers()
+except Exception as e:
+    logger.error(f"{e}")
