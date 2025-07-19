@@ -5,122 +5,161 @@ from dataclasses import dataclass
 from configuration import cam_id
 from singleton_logger import SingletonLogger
 import configuration as conf
-from pyramid_builder import PyramidBuilder, Marker3D
-from typing import List
+from robot_scenarios import PyramidBuilder
+from typing import List, Dict, Optional
 
 logger = SingletonLogger()
 
-@dataclass
+@dataclass()
 class Point3:
     x: float
     y: float
     z: float
 
-def detect_markers(frame, detector, camera_matrix, dist_coeffs) -> List[Marker3D]:
-    """Обнаруживает маркеры и возвращает список Marker3D"""
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    corners, ids, _ = detector.detectMarkers(gray)
+def p3_from_list(l):
+    return Point3(l[0], l[1], l[2])
 
-    if ids is None:
-        return []
+@dataclass()
+class Marker:
+    id: int
+    position: Point3
+    oriental: Point3
 
-    rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(
-        corners, conf.marker_size, camera_matrix, dist_coeffs
-    )
+def calibr(aruco_dict, img):
+    """Калибровка камеры с использованием шахматной доски"""
+    pattern_size = (7, 7)
+    objp = np.zeros((pattern_size[0] * pattern_size[1], 3), np.float32)
+    objp[:, :2] = np.mgrid[0:pattern_size[0], 0:pattern_size[1]].T.reshape(-1, 2)
 
-    markers = []
-    for i in range(len(ids)):
-        pos = tvecs[i][0] * 1000  # Конвертируем в мм
-        rot = rvecs[i][0]
-        markers.append(Marker3D(
-            id=int(ids[i][0]),
-            position=Point3(pos[0], pos[1], pos[2]),
-            rotation=Point3(rot[0], rot[1], rot[2])
-        ))
+    obj_points, img_points = [], []
+    ret, corners = cv2.findChessboardCorners(img, (7,6), None)
 
-    return markers
-
-def visualize(frame, markers: List[Marker3D], builder: PyramidBuilder):
-    """Визуализация процесса сборки"""
-    for marker in markers:
-        # Отрисовка осей маркеров
-        cv2.drawFrameAxes(
-            frame,
-            builder.camera_matrix,
-            builder.dist_coeffs,
-            np.array([[marker.rotation.x, marker.rotation.y, marker.rotation.z]]),
-            np.array([[marker.position.x/1000, marker.position.y/1000, marker.position.z/1000]]),
-            0.05
+    if ret:
+        corners2 = cv2.cornerSubPix(
+            cv2.cvtColor(img, cv2.COLOR_BGR2GRAY),
+            corners, (11, 11), (-1, -1),
+            (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
         )
+        obj_points.append(objp)
+        img_points.append(corners2)
 
-        # Подпись маркера
-        cv2.putText(frame, f"ID: {marker.id}",
-                    (int(marker.position.x), int(marker.position.y)),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,255,0), 2)
+        ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(
+            obj_points, img_points, img.shape[::-1], None, None)
 
-    # Отображение состояния сборки
-    if builder.pyramid_center:
-        cv2.putText(frame, f"Уровень: {builder.current_level}",
-                    (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255,255,0), 2)
+        if ret:
+            mean_error = 0
+            for i in range(len(obj_points)):
+                imgpoints2, _ = cv2.projectPoints(obj_points[i], rvecs[i], tvecs[i], mtx, dist)
+                error = cv2.norm(img_points[i], imgpoints2, cv2.NORM_L2) / len(imgpoints2)
+                mean_error += error
 
-    cv2.imshow('ArUco Detection', frame)
+            logger.info(f"Средняя ошибка репроекции: {mean_error / len(obj_points)} пикселей")
+            np.savez('camera_calibration.npz',
+                     camera_matrix=mtx,
+                     dist_coeffs=dist,
+                     reprojection_error=mean_error / len(obj_points))
+            return mtx, dist
 
-def load_calibration():
-    """Загружает параметры калибровки камеры"""
+    logger.error("Ошибка калибровки!")
+    return None, None
+
+def get_marker_by(id_, markers):
+    return next((m for m in markers if m.id == id_), None)
+
+def detect_and_process_markers():
+    cap = cv2.VideoCapture(cam_id)
+    if not cap.isOpened():
+        logger.error(f"Ошибка! Камера id={cam_id} не подключена!")
+        exit()
+
+    # Инициализация детекторов
+    parameters = aruco.DetectorParameters()
+    detectors = {
+        '4X4': aruco.ArucoDetector(aruco.getPredefinedDictionary(aruco.DICT_4X4_250), parameters),
+        '5X5': aruco.ArucoDetector(aruco.getPredefinedDictionary(aruco.DICT_5X5_250), parameters),
+        '6X6': aruco.ArucoDetector(aruco.getPredefinedDictionary(aruco.DICT_6X6_250), parameters)
+    }
+
+    # Загрузка или калибровка параметров камеры
     try:
         calib_data = np.load('camera_calibration.npz')
-        return calib_data['camera_matrix'], calib_data['dist_coeffs']
+        camera_matrix = calib_data['camera_matrix']
+        dist_coeffs = calib_data['dist_coeffs']
+        logger.info("Параметры камеры загружены из файла")
     except:
-        logger.error("Не удалось загрузить параметры калибровки!")
-        return None, None
-
-def main():
-    # Инициализация детектора ArUco
-    aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_250)
-    parameters = aruco.DetectorParameters()
-    detector = aruco.ArucoDetector(aruco_dict, parameters)
-
-    # Загрузка параметров камеры
-    camera_matrix, dist_coeffs = load_calibration()
-    if camera_matrix is None:
-        logger.error("Необходима калибровка камеры!")
-        return
+        logger.warning("Файл калибровки не найден, выполняется калибровка...")
+        ret, frame = cap.read()
+        if ret:
+            camera_matrix, dist_coeffs = calibr(aruco.getPredefinedDictionary(aruco.DICT_4X4_250), frame)
+        else:
+            logger.error("Не удалось получить кадр для калибровки")
+            exit()
 
     # Инициализация сборщика пирамиды
     builder = PyramidBuilder()
     builder.camera_matrix = camera_matrix
     builder.dist_coeffs = dist_coeffs
 
-    cap = cv2.VideoCapture(cam_id)
-    try:
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                logger.error("Не удалось получить кадр")
-                break
+    logger.info("Нажмите 'q' для выхода или 's' для начала сборки")
+    building = False
 
-            # Детекция маркеров
-            markers = detect_markers(frame, detector, camera_matrix, dist_coeffs)
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            logger.error("Ошибка: Не удалось получить кадр")
+            break
 
-            # Обработка маркеров и сборка пирамиды
-            pyramid_complete = builder.process_markers(markers)
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        all_markers = []
+
+        # Детекция маркеров всех типов
+        for det_name, detector in detectors.items():
+            corners, ids, _ = detector.detectMarkers(gray)
+            if ids is not None:
+                rvecs, tvecs, _ = aruco.estimatePoseSingleMarkers(
+                    corners, 0.05, camera_matrix, dist_coeffs)
+
+                for i in range(len(ids)):
+                    marker = Marker(
+                        id=int(ids[i][0]),
+                        position=p3_from_list(tvecs[i][0]),
+                        oriental=p3_from_list(rvecs[i][0])
+                    )
+                    all_markers.append(marker)
+                    cv2.drawFrameAxes(
+                        frame, camera_matrix, dist_coeffs,
+                        rvecs[i], tvecs[i], 0.05
+                    )
+                aruco.drawDetectedMarkers(frame, corners, ids)
+
+        # Обработка команд
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('q'):
+            break
+        elif key == ord('s') and not building:
+            building = True
+            logger.info("Начало сборки пирамиды...")
+
+        # Если идет процесс сборки
+        if building and all_markers:
+            pyramid_complete = builder.process_markers(all_markers)
             if pyramid_complete:
                 logger.info("Пирамида успешно собрана!")
-                break
+                building = False
 
-            # Визуализация
-            visualize(frame, markers, builder)
+        # Отображение информации
+        if builder.pyramid_center:
+            cv2.putText(frame, f"Уровень: {builder.current_level}",
+                        (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255,255,0), 2)
 
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
+        cv2.imshow('ArUco Detection', frame)
 
-    finally:
-        cap.release()
-        cv2.destroyAllWindows()
+    cap.release()
+    cv2.destroyAllWindows()
 
 if __name__ == "__main__":
     try:
-        main()
+        detect_and_process_markers()
     except Exception as e:
-        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Критическая ошибка: {e}")
         raise
