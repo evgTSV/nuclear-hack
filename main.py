@@ -1,6 +1,8 @@
 import cv2
 import cv2.aruco as aruco
 import numpy as np
+
+from builder import PyramidBuilder
 from configuration import cam_id
 from singleton_logger import SingletonLogger
 from models import Point3, Marker, p3_from_list
@@ -11,6 +13,7 @@ import time
 from models import Point3, Marker
 from robot_client import send_to_arduino_and_get_response
 from command import Move, SetRotate, VacuumOn, VacuumOff
+
 
 logger = SingletonLogger()
 
