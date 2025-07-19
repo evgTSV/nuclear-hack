@@ -25,7 +25,7 @@ class Marker:
     oriental: Point3
 
 def calibr(aruco_dict, img):
-    pattern_size=(7, 6)
+    pattern_size=(7, 7)
     objp = np.zeros((pattern_size[0] * pattern_size[1], 3), np.float32)
     objp[:, :2] = np.mgrid[0:pattern_size[0], 0:pattern_size[1]].T.reshape(-1, 2)
     obj_points, img_points = [], []
