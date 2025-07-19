@@ -8,3 +8,5 @@ Pyramid from Xaoc
 | CAM_ID            | Id камеры манипулятора                                                          |
 | MARKER_Z          | Высота маркера                                                                  |
 | FIELD_Z           | Базовый Z поля                                                                  |
+| CORNERS_MARKERS   | Базовый Z поля                                                                  |
+| CONSTRUCT_MARKERS | Базовый Z поля                                                                  |

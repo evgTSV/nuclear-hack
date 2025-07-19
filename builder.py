@@ -16,8 +16,8 @@ class PyramidBuilder:
         self.current_level = 0
         self.safe_height = self.max_zindex * conf.marker_z + conf.field_z
 
-        self.corner_ids = [0, 1, 2, 3]
-        self.target_ids = [40, 50, 60, 70, 80]
+        self.corner_ids = conf.corners_markers
+        self.target_ids = conf.construct_markers
         self.pyramid_center = None
 
     def _rotation_vector_to_angle(self, rotation: 'Point3') -> float:
