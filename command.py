@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Union
-from main import Point3
+from models import Point3
 from singleton_logger import SingletonLogger
 
 class RbCmdKind(Enum):

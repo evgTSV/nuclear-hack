@@ -1,29 +1,18 @@
 import cv2
 import cv2.aruco as aruco
 import numpy as np
-from dataclasses import dataclass
 from configuration import cam_id
 from singleton_logger import SingletonLogger
+from models import Point3, Marker, p3_from_list
 import configuration as conf
-from robot_scenarios import PyramidBuilder
-from typing import List, Dict, Optional
+
+from typing import Dict, List
+import time
+from models import Point3, Marker
+from robot_client import send_to_arduino_and_get_response
+from command import Move, SetRotate, VacuumOn, VacuumOff
 
 logger = SingletonLogger()
-
-@dataclass()
-class Point3:
-    x: float
-    y: float
-    z: float
-
-def p3_from_list(l):
-    return Point3(l[0], l[1], l[2])
-
-@dataclass()
-class Marker:
-    id: int
-    position: Point3
-    oriental: Point3
 
 def calibr(aruco_dict, img):
     """Калибровка камеры с использованием шахматной доски"""

@@ -2,7 +2,7 @@ import threading
 
 from command import RbCmdKind
 from singleton_logger import SingletonLogger
-from main import Point3
+from models import Point3
 from command import RbCmd, command_to_str
 
 import serial
