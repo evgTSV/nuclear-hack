@@ -13,3 +13,7 @@ offsets = (
 ).get()
 
 cam_id = int(getenv("CAM_ID"))
+
+marker_z = float(getenv("MARKER_Z"))
+
+field_z = float(getenv("FIELD_Z"))
